@@ -24,4 +24,8 @@ C# implementation of Finite State Transducers for use in full-text search tasks
     Lelystad Airport->2522
     FST print terms: 2, time: 00:00:00.0475820
    ```
+# References
 
+* [Index 1,600,000,000 Keys with Automata and Rust](https://blog.burntsushi.net/transducers)
+* [Using Finite State Transducers in Lucene](http://blog.mikemccandless.com/2010/12/using-finite-state-transducers-in.html)
+* S. Mihov, D. Maurel, [Direct Construction of Minimal Acyclic Subsequential Transducers](http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.24.3698&rep=rep1&type=pdf)
