@@ -1,5 +1,7 @@
-# FST
-C# implementation of Finite State Transducers for use in full-text search tasks
+# Finite State Transducer (FST) Library for .NET Core
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![Travis Status](https://travis-ci.com/PetroProtsyk/FST.svg?branch=master)](https://travis-ci.com/PetroProtsyk/FST)
+
+C# implementation of Finite State Transducer for use in full-text search tasks
 
 # Command Line Arguments
 
