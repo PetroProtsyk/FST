@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading;
+using Protsyk.PMS.FST.Persistance;
 
 namespace Protsyk.PMS.FST
 {
@@ -34,14 +35,31 @@ namespace Protsyk.PMS.FST
 
     public class FSTBuilder<T>
     {
+        #region Fields
+        private const int InitialWordSize = 64;
+
         private readonly IDictionary<int, List<StateWithTransitions>> minimalTransducerStatesDictionary;
 
         private readonly IFSTOutput<T> outputType;
 
+        private readonly IPersistentStorage storage;
+
+        private int maxWordSize;
+
+        private StateWithTransitions[] tempState;
+
+        private string previousWord;
+        #endregion
+
         public FSTBuilder(IFSTOutput<T> outputType)
+            :this(outputType, null)
+        { }
+
+        public FSTBuilder(IFSTOutput<T> outputType, IPersistentStorage storage)
         {
             this.minimalTransducerStatesDictionary = new Dictionary<int, List<StateWithTransitions>>();
             this.outputType = outputType;
+            this.storage = storage;
         }
 
         private class StateWithTransitions
@@ -271,87 +289,112 @@ namespace Protsyk.PMS.FST
 
         public FST<T> FromList(string[] inputs, T[] outputs)
         {
-            var maxWordSize = 1 + inputs.Max(x => x.Length);
-            var tempState = new StateWithTransitions[maxWordSize];
+            Begin();
+            for (int j = 0; j < inputs.Length; ++j)
+            {
+                Add(inputs[j], outputs[j]);
+            }
+            return End();
+        }
+
+        public void Begin()
+        {
+            maxWordSize = InitialWordSize;
+            tempState = new StateWithTransitions[maxWordSize];
             for (int i = 0; i < maxWordSize; ++i)
             {
                 tempState[i] = new StateWithTransitions();
             }
-            var previousWord = string.Empty;
-            var currentWord = default(string);
-            for (int j = 0; j < inputs.Length; ++j)
+            previousWord = string.Empty;
+        }
+
+        public void Add(string currentWord, T currentOutput)
+        {
+            if (currentWord.Length + 1> tempState.Length)
             {
-                currentWord = inputs[j];
-
-                if (System.StringComparer.Ordinal.Compare(currentWord, previousWord) <= 0)
+                var newTemp = new StateWithTransitions[currentWord.Length + 1];
+                for (int i=0; i<maxWordSize; ++i)
                 {
-                    throw new Exception($"Input should be ordered and each item should be unique: {previousWord} < {currentWord}");
+                    newTemp[i] = tempState[i];
                 }
-
-                var currentOutput = outputs[j];
-                var prefixLengthPlusOne = 1 + Utils.LCP(previousWord, currentWord);
-
-                if (prefixLengthPlusOne == 1 + currentWord.Length)
+                for (int i = maxWordSize; i < newTemp.Length; ++i)
                 {
-                    throw new Exception($"Duplicate input {currentWord}");
+                    newTemp[i] = new StateWithTransitions();
                 }
-
-                // Minimize the states from suffix of the previous word
-                for (int i = previousWord.Length; i >= prefixLengthPlusOne; --i)
-                {
-                    SetTransition(tempState[i - 1],
-                                  previousWord[i - 1],
-                                  FindMinimized(tempState[i]));
-                }
-
-                // Initialize tail the states for the current word
-                for (int i = prefixLengthPlusOne; i < currentWord.Length + 1; ++i)
-                {
-                    ClearState(tempState[i]);
-                    SetTransition(tempState[i - 1],
-                                  currentWord[i - 1],
-                                  tempState[i]);
-                }
-
-                SetFinal(tempState[currentWord.Length]);
-
-                // Set outputs
-                for (int i = 1; i < prefixLengthPlusOne; ++i)
-                {
-                    var output = GetOutput(tempState[i - 1], currentWord[i - 1]);
-                    if (tempState[i].IsFinal)
-                    {
-                        currentOutput = outputType.Sub(currentOutput, output);
-                    }
-                    else
-                    {
-                        var commonOutput = outputType.Min(output, currentOutput);
-                        if (!commonOutput.Equals(output))
-                        {
-                            var suffixOutput = outputType.Sub(output, commonOutput);
-                            SetOutput(tempState[i - 1], currentWord[i - 1], commonOutput);
-                            if (!suffixOutput.Equals(outputType.Zero()))
-                            {
-                                if (tempState[i].IsFinal || tempState[i].Arcs.Count == 0)
-                                {
-                                    throw new Exception($"What? {previousWord}->{outputs[j-1]} {currentWord}->{outputs[j]}");
-                                }
-                                else
-                                {
-                                    PropagateOutput(tempState[i], suffixOutput, outputType);
-                                }
-                            }
-                        }
-                        currentOutput = outputType.Sub(currentOutput, commonOutput);
-                    }
-                }
-
-                SetOutput(tempState[prefixLengthPlusOne - 1], currentWord[prefixLengthPlusOne - 1], currentOutput);
-
-                previousWord = currentWord;
+                maxWordSize = currentWord.Length;
+                tempState = newTemp;
             }
 
-            for (int i = currentWord.Length; i > 0; --i)
+            if (StringComparer.Ordinal.Compare(currentWord, previousWord) <= 0)
+            {
+                throw new Exception($"Input should be ordered and each item should be unique: {previousWord} < {currentWord}");
+            }
+
+            var prefixLengthPlusOne = 1 + Utils.LCP(previousWord, currentWord);
+
+            if (prefixLengthPlusOne == 1 + currentWord.Length)
+            {
+                throw new Exception($"Duplicate input {currentWord}");
+            }
+
+            // Minimize states from the suffix of the previous word
+            for (int i = previousWord.Length; i >= prefixLengthPlusOne; --i)
+            {
+                SetTransition(tempState[i - 1],
+                              previousWord[i - 1],
+                              FindMinimized(tempState[i]));
+            }
+
+            // Initialize tail states for the current word
+            for (int i = prefixLengthPlusOne; i < currentWord.Length + 1; ++i)
+            {
+                ClearState(tempState[i]);
+                SetTransition(tempState[i - 1],
+                              currentWord[i - 1],
+                              tempState[i]);
+            }
+
+            SetFinal(tempState[currentWord.Length]);
+
+            // Set outputs
+            for (int i = 1; i < prefixLengthPlusOne; ++i)
+            {
+                var output = GetOutput(tempState[i - 1], currentWord[i - 1]);
+                if (tempState[i].IsFinal)
+                {
+                    currentOutput = outputType.Sub(currentOutput, output);
+                }
+                else
+                {
+                    var commonOutput = outputType.Min(output, currentOutput);
+                    if (!commonOutput.Equals(output))
+                    {
+                        var suffixOutput = outputType.Sub(output, commonOutput);
+                        SetOutput(tempState[i - 1], currentWord[i - 1], commonOutput);
+                        if (!suffixOutput.Equals(outputType.Zero()))
+                        {
+                            if (tempState[i].IsFinal || tempState[i].Arcs.Count == 0)
+                            {
+                                throw new Exception($"Unexpected final state");
+                            }
+                            else
+                            {
+                                PropagateOutput(tempState[i], suffixOutput, outputType);
+                            }
+                        }
+                    }
+                    currentOutput = outputType.Sub(currentOutput, commonOutput);
+                }
+            }
+
+            SetOutput(tempState[prefixLengthPlusOne - 1], currentWord[prefixLengthPlusOne - 1], currentOutput);
+
+            previousWord = currentWord;
+        }
+
+        public FST<T> End()
+        {
+            for (int i = previousWord.Length; i > 0; --i)
             {
                 SetTransition(tempState[i - 1],
                               previousWord[i - 1],
