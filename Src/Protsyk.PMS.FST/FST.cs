@@ -547,7 +547,7 @@ namespace Protsyk.PMS.FST
         public byte[] GetBytesCompressed()
         {
             var size = 0;
-            size += VarInt.GetByteSize((uint)Initial);
+            size += Numeric.GetByteSize((uint)Initial);
             for (int i = 0; i < states.Count; ++i)
             {
                 if (trans.TryGetValue(states[i].Id, out var ts) && (ts.Count > 0))
@@ -571,7 +571,7 @@ namespace Protsyk.PMS.FST
 
             var result = new byte[size];
             var writeIndex = 0;
-            writeIndex += VarInt.WriteVInt32(Initial, result, writeIndex);
+            writeIndex += Numeric.WriteInt(Initial, result, writeIndex);
             for (int i = 0; i < states.Count; ++i)
             {
                 if (trans.TryGetValue(states[i].Id, out var ts) && (ts.Count > 0))
@@ -604,7 +604,7 @@ namespace Protsyk.PMS.FST
             var fst = new FST<T>(outputType);
             var readIndex = 0;
             var sId = 0;
-            readIndex += VarInt.ReadVInt32(data, readIndex, out var initial);
+            readIndex += Numeric.ReadInt(data, readIndex, out var initial);
             fst.Initial = (int)initial;
             while (readIndex != data.Length)
             {
