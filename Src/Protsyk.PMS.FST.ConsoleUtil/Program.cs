@@ -62,7 +62,7 @@ namespace Protsyk.PMS.FST.ConsoleUtil
             {
                 using (var fst = new PersistentFST<int>(outputType, outputFile))
                 {
-                    foreach (var term in fst.Match(new WildcardMatcher(opts.Pattern, 255)))
+                    foreach (var term in fst.Match(new WildcardMatcher(opts.Pattern, 1024)))
                     {
                         if (!fst.TryMatch(term, out int value))
                         {

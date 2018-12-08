@@ -845,37 +845,59 @@ namespace Protsyk.PMS.FST
 
         public IEnumerable<string> Match(IDfaMatcher<char> matcher)
         {
-            var result = new List<string>();
+            var stack = new Stack<ValueTuple<int, long, char>>();
             var prefix = new List<char>();
-            MatchRecursive(matcher, initial, result, prefix);
-            return result;
-        }
+            stack.Push(new ValueTuple<int, long, char>(0, initial, '\0'));
 
-        private void MatchRecursive(IDfaMatcher<char> matcher, long stateOffset, List<string> result, List<char> prefix)
-        {
-            var (isFinal, ts) = ReadState(stateOffset);
-
-            if (isFinal && matcher.IsFinal())
+            while (stack.Count > 0)
             {
-                result.Add(new string(prefix.ToArray()));
-            }
+                var (ac, stateOffset, ch) = stack.Pop();
 
-            if (ts == null)
-            {
-                return;
-            }
-
-            for (int i=0; i<ts.Length; ++i)
-            {
-                var t = ts[i];
-                if (matcher.Next(t.Input))
+                if (ac == 0)
                 {
-                    prefix.Add(t.Input);
+                    var (isFinal, ts) = ReadState(stateOffset);
 
-                    MatchRecursive(matcher, t.ToOffset, result, prefix);
+                    if (isFinal && matcher.IsFinal())
+                    {
+                        yield return new string(prefix.ToArray());
+                    }
 
+                    if (ts != null)
+                    {
+                        for (int i = 0; i < ts.Length; ++i)
+                        {
+                            var t = ts[i];
+                            if (matcher.Next(t.Input))
+                            {
+                                matcher.Pop();
+
+                                // Reverse order of actions
+                                // 1 - Add to prefix
+                                // 0 - Go to the state
+                                // 2 - Remove from prefix
+                                stack.Push(new ValueTuple<int, long, char>(2, 0, '\0'));
+                                stack.Push(new ValueTuple<int, long, char>(0, t.ToOffset, '\0'));
+                                stack.Push(new ValueTuple<int, long, char>(1, 0, t.Input));
+                            }
+                        }
+                    }
+                }
+                else if (ac == 1)
+                {
+                    prefix.Add(ch);
+                    if (!matcher.Next(ch))
+                    {
+                        throw new Exception("What?");
+                    }
+                }
+                else if (ac == 2)
+                {
                     prefix.RemoveAt(prefix.Count - 1);
                     matcher.Pop();
+                }
+                else
+                {
+                    throw new Exception("What?");
                 }
             }
         }
