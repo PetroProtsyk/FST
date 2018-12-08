@@ -141,6 +141,7 @@ namespace Protsyk.PMS.FST.ConsoleUtil
             }
 
             timer.Restart();
+            var terms = 0;
             using (var outputFile = new FileStorage(opts.OutputFile))
             {
                 using (var fstBuilder = new FSTBuilder<int>(outputType, opts.CacheSize, outputFile))
@@ -149,9 +150,10 @@ namespace Protsyk.PMS.FST.ConsoleUtil
                     foreach (var (term, score) in ParseFromOptions(opts))
                     {
                         fstBuilder.Add(term, score);
+                        ++terms;
                     }
                     fstBuilder.End();
-                    PrintConsole(ConsoleColor.White, $"FST constructed time: {timer.Elapsed}, cache size: {opts.CacheSize}, Memory: {Process.GetCurrentProcess().WorkingSet64}, output size: {outputFile.Length}");
+                    PrintConsole(ConsoleColor.White, $"FST constructed time: {timer.Elapsed}, terms: {terms}, cache size: {opts.CacheSize}, Memory: {Process.GetCurrentProcess().WorkingSet64}, output size: {outputFile.Length}");
                 }
             }
 
