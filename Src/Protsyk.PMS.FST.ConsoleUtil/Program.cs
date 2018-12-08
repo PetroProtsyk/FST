@@ -14,6 +14,9 @@ namespace Protsyk.PMS.FST.ConsoleUtil
         [Option('i', "input", Required = true, HelpText = "Input file (text, UTF-8 encoded)")]
         public string InputFile { get; set; }
 
+        [Option('n', "inputformat", Default = "map", HelpText = "Input format (sorted, map, plain)")]
+        public string InputFormat { get; set; }
+
         [Option('o', "output", Required = false, Default = "output.fst", HelpText = "Output file name")]
         public string OutputFile { get; set; }
 
@@ -75,20 +78,62 @@ namespace Protsyk.PMS.FST.ConsoleUtil
             return 0;
         }
 
+        private static IEnumerable<ValueTuple<string, int>> ParseConvertAndSort(string fileName)
+        {
+            var index = 0;
+            foreach (var item in File.ReadAllLines(fileName)
+                             .Select(x => x.Replace("->", "").ToLowerInvariant())
+                             .Distinct()
+                             .OrderBy(x => x, StringComparer.Ordinal)
+                             .Select(x => $"{x}->{index++}"))
+            {
+                var terms = item.Split("->");
+                yield return (terms[0], int.Parse(terms[1]));
+            }
+        }
+
+        private static IEnumerable<ValueTuple<string, int>> ParseAndSort(string fileName)
+        {
+            foreach (var item in File.ReadAllLines(fileName)
+                                     .OrderBy(x => x.Split("->")[0], StringComparer.Ordinal))
+            {
+                var terms = item.Split("->");
+                yield return (terms[0], int.Parse(terms[1]));
+            }
+        }
+
+        private static IEnumerable<ValueTuple<string, int>> ParseSorted(string fileName)
+        {
+            foreach (var item in File.ReadLines(fileName))
+            {
+                var terms = item.Split("->");
+                yield return (terms[0], int.Parse(terms[1]));
+            }
+        }
+
+        private static IEnumerable<ValueTuple<string, int>> ParseFromOptions(BuildOptions opts)
+        {
+            if (opts.InputFormat == "sorted")
+            {
+                return ParseSorted(opts.InputFile);
+            }
+
+            if (opts.InputFormat == "map")
+            {
+                return ParseAndSort(opts.InputFile);
+            }
+
+            if (opts.InputFormat == "plain")
+            {
+                return ParseConvertAndSort(opts.InputFile);
+            }
+
+            throw new ArgumentException($"Input format is not correct {opts.InputFormat}");
+        }
+
         private static int DoBuild(BuildOptions opts)
         {
             var timer = Stopwatch.StartNew();
-            var input = File.ReadAllLines(opts.InputFile).OrderBy(x => x.Split("->")[0], StringComparer.Ordinal).ToArray();
-            var terms = new string[input.Length];
-            var outputs = new int[input.Length];
-            for (int i = 0; i < input.Length; ++i)
-            {
-                var s = input[i].Split("->");
-                terms[i] = s[0];
-                outputs[i] = int.Parse(s[1]);
-                // Console.WriteLine($"{terms[i]}->{outputs[i]}");
-            }
-            PrintConsole(ConsoleColor.White, $"Input read term: {terms.Length}, time: {timer.Elapsed}");
 
             if (File.Exists(opts.OutputFile))
             {
@@ -101,9 +146,9 @@ namespace Protsyk.PMS.FST.ConsoleUtil
                 using (var fstBuilder = new FSTBuilder<int>(outputType, opts.CacheSize, outputFile))
                 {
                     fstBuilder.Begin();
-                    for (int j = 0; j < terms.Length; ++j)
+                    foreach (var (term, score) in ParseFromOptions(opts))
                     {
-                        fstBuilder.Add(terms[j], outputs[j]);
+                        fstBuilder.Add(term, score);
                     }
                     fstBuilder.End();
                     PrintConsole(ConsoleColor.White, $"FST constructed time: {timer.Elapsed}, cache size: {opts.CacheSize}, Memory: {Process.GetCurrentProcess().WorkingSet64}, output size: {outputFile.Length}");
@@ -115,14 +160,14 @@ namespace Protsyk.PMS.FST.ConsoleUtil
                 if (outputFile.Length < 64 * 1024 * 1024)
                 {
                     timer.Restart();
-                    var data = new Byte[outputFile.Length];
+                    var data = new byte[outputFile.Length];
                     outputFile.ReadAll(0, data, 0, data.Length);
                     var fst = FST<int>.FromBytesCompressed(data, outputType);
-                    for (int i = 0; i < terms.Length; ++i)
+                    foreach (var (term, score) in ParseFromOptions(opts))
                     {
-                        if (!fst.TryMatch(terms[i], out var value) || value != outputs[i])
+                        if (!fst.TryMatch(term, out var value) || value != score)
                         {
-                            throw new Exception($"Bug at term {terms[i]}: {value} != {outputs[i]}");
+                            throw new Exception($"Bug at term {term}: {value} != {score}");
                         }
                     }
                     PrintConsole(ConsoleColor.White, $"FST (memory) verification time: {timer.Elapsed}");
@@ -135,11 +180,11 @@ namespace Protsyk.PMS.FST.ConsoleUtil
             {
                 using (var fst = new PersistentFST<int>(outputType, outputFile))
                 {
-                    for (int i = 0; i < terms.Length; ++i)
+                    foreach (var (term, score) in ParseFromOptions(opts))
                     {
-                        if (!fst.TryMatch(terms[i], out var value) || value != outputs[i])
+                        if (!fst.TryMatch(term, out var value) || value != score)
                         {
-                            throw new Exception($"Bug at term {terms[i]}: {value} != {outputs[i]}");
+                            throw new Exception($"Bug at term {term}: {value} != {score}");
                         }
                     }
                 }
