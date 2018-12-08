@@ -291,20 +291,24 @@ namespace Protsyk.PMS.FST
             else
             {
                 var dedupHash = s.GetDedupHash();
-                if (!minimalTransducerStatesDictionary.TryGetValue(dedupHash, out var statesWithSameHash))
-                {
-                    statesWithSameHash = new List<LinkedListNode<int>>();
-                    minimalTransducerStatesDictionary.Add(dedupHash, statesWithSameHash);
-                }
 
-                for (int i = 0; i < statesWithSameHash.Count; ++i)
+                // Try get cached state
                 {
-                    var frozenState = frozenStates[statesWithSameHash[i].Value];
-                    if (frozenState.IsEquivalent(s))
+                    if (!minimalTransducerStatesDictionary.TryGetValue(dedupHash, out var statesWithSameHash))
                     {
-                        usageQueue.Remove(statesWithSameHash[i]);
-                        usageQueue.AddFirst(statesWithSameHash[i]);
-                        return frozenState;
+                        statesWithSameHash = new List<LinkedListNode<int>>();
+                        minimalTransducerStatesDictionary.Add(dedupHash, statesWithSameHash);
+                    }
+
+                    for (int i = 0; i < statesWithSameHash.Count; ++i)
+                    {
+                        var frozenState = frozenStates[statesWithSameHash[i].Value];
+                        if (frozenState.IsEquivalent(s))
+                        {
+                            usageQueue.Remove(statesWithSameHash[i]);
+                            usageQueue.AddFirst(statesWithSameHash[i]);
+                            return frozenState;
+                        }
                     }
                 }
 
@@ -338,7 +342,17 @@ namespace Protsyk.PMS.FST
                 }
 
                 var r = FreezeState(s);
-                statesWithSameHash.Add(usageQueue.AddFirst(r.Id));
+
+                // Create new frozen state and cache it
+                {
+                    if (!minimalTransducerStatesDictionary.TryGetValue(dedupHash, out var listToAdd))
+                    {
+                        listToAdd = new List<LinkedListNode<int>>();
+                        minimalTransducerStatesDictionary.Add(dedupHash, listToAdd);
+                    }
+                    listToAdd.Add(usageQueue.AddFirst(r.Id));
+                }
+
                 return r;
             }
         }
