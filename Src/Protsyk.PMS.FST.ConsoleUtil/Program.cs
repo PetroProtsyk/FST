@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using CommandLine;
+using Protsyk.PMS.FST.Persistance;
 
 namespace Protsyk.PMS.FST.ConsoleUtil
 {
@@ -18,6 +19,9 @@ namespace Protsyk.PMS.FST.ConsoleUtil
 
         [Option('f', "format", Required = false, Default = "Default", HelpText = "Output format (Default, Compressed, DOT)")]
         public string Format { get; set; }
+
+        [Option('c', "cachesize", Required = false, Default = 65000, HelpText = "Size of cache for minimized nodes")]
+        public int CacheSize { get; set; }
     }
 
     [Verb("print", HelpText = "Print all terms and values encoded in FST")]
@@ -49,47 +53,35 @@ namespace Protsyk.PMS.FST.ConsoleUtil
         {
             var timer = Stopwatch.StartNew();
 
-            var bytes = File.ReadAllBytes(opts.InputFile);
-            var fstBytes = bytes.Skip(7).ToArray();
-            var fst = default(FST<int>);
-            if (bytes[6] == 'D')
-            {
-                fst = FST<int>.FromBytes(fstBytes, outputType);
-            } 
-            else if (bytes[6] == 'C')
-            {
-                fst = FST<int>.FromBytesCompressed(fstBytes, outputType);
-            }
-            else
-            {
-                throw new NotSupportedException("FST format is not supported or input is not correct");
-            }
-            PrintConsole(ConsoleColor.White, $"FST read from: {opts.InputFile}, time: {timer.Elapsed}");
-
             timer.Restart();
             var terms = 0;
-            foreach (var term in fst.Match(new WildcardMatcher(opts.Pattern, 255)))
+            using (var outputFile = new FileStorage(opts.InputFile))
             {
-                if (!fst.TryMatch(term, out int value))
+                using (var fst = new PersistentFST<int>(outputType, outputFile))
                 {
-                    throw new Exception("This is a bug");
+                    foreach (var term in fst.Match(new WildcardMatcher(opts.Pattern, 255)))
+                    {
+                        if (!fst.TryMatch(term, out int value))
+                        {
+                            throw new Exception("This is a bug");
+                        }
+
+                        ++terms;
+                        Console.WriteLine($"{term}->{value}");
+                    }
+                    PrintConsole(ConsoleColor.White, $"FST print terms: {terms}, time: {timer.Elapsed}");
                 }
-
-                ++terms;
-                Console.WriteLine($"{term}->{value}");
             }
-            PrintConsole(ConsoleColor.White, $"FST print terms: {terms}, time: {timer.Elapsed}");
-
             return 0;
         }
 
         private static int DoBuild(BuildOptions opts)
         {
             var timer = Stopwatch.StartNew();
-            var input = File.ReadAllLines(opts.InputFile).OrderBy(x=>x.Split("->")[0], StringComparer.Ordinal).ToArray();
+            var input = File.ReadAllLines(opts.InputFile).OrderBy(x => x.Split("->")[0], StringComparer.Ordinal).ToArray();
             var terms = new string[input.Length];
             var outputs = new int[input.Length];
-            for (int i=0; i<input.Length; ++i)
+            for (int i = 0; i < input.Length; ++i)
             {
                 var s = input[i].Split("->");
                 terms[i] = s[0];
@@ -98,57 +90,61 @@ namespace Protsyk.PMS.FST.ConsoleUtil
             }
             PrintConsole(ConsoleColor.White, $"Input read term: {terms.Length}, time: {timer.Elapsed}");
 
-            timer.Restart();
-            var fst = new FSTBuilder<int>(outputType).FromList(terms, outputs);
-            PrintConsole(ConsoleColor.White, $"FST constructed time: {timer.Elapsed}");
+            if (File.Exists(opts.OutputFile))
+            {
+                File.Delete(opts.OutputFile);
+            }
 
             timer.Restart();
-            for (int i=0; i<terms.Length; ++i)
+            using (var outputFile = new FileStorage(opts.OutputFile))
             {
-                if (!fst.TryMatch(terms[i], out var value) || value != outputs[i])
+                using (var fstBuilder = new FSTBuilder<int>(outputType, opts.CacheSize, outputFile))
                 {
-                    throw new Exception($"Bug at term {terms[i]}: {value} != {outputs[i]}");
+                    fstBuilder.Begin();
+                    for (int j = 0; j < terms.Length; ++j)
+                    {
+                        fstBuilder.Add(terms[j], outputs[j]);
+                    }
+                    fstBuilder.End();
+                    PrintConsole(ConsoleColor.White, $"FST constructed time: {timer.Elapsed}, cache size: {opts.CacheSize}, Memory: {Process.GetCurrentProcess().WorkingSet64}, output size: {outputFile.Length}");
                 }
             }
-            PrintConsole(ConsoleColor.White, $"FST verification time: {timer.Elapsed}");
 
-            var size = 0;
+            using (var outputFile = new FileStorage(opts.OutputFile))
+            {
+                if (outputFile.Length < 64 * 1024 * 1024)
+                {
+                    timer.Restart();
+                    var data = new Byte[outputFile.Length];
+                    outputFile.ReadAll(0, data, 0, data.Length);
+                    var fst = FST<int>.FromBytesCompressed(data, outputType);
+                    for (int i = 0; i < terms.Length; ++i)
+                    {
+                        if (!fst.TryMatch(terms[i], out var value) || value != outputs[i])
+                        {
+                            throw new Exception($"Bug at term {terms[i]}: {value} != {outputs[i]}");
+                        }
+                    }
+                    PrintConsole(ConsoleColor.White, $"FST (memory) verification time: {timer.Elapsed}");
+                }
+            }
+
+
             timer.Restart();
-            if (opts.Format == "Default")
+            using (var outputFile = new FileStorage(opts.OutputFile))
             {
-                var fstBytes = fst.GetBytes();
-                var data = new byte[6 + 1 + fstBytes.Length];
-                data[0] = (byte)'F';
-                data[1] = (byte)'S';
-                data[2] = (byte)'T';
-                data[3] = (byte)'-';
-                data[4] = (byte)'0';
-                data[5] = (byte)'1';
-                data[6] = (byte)'D';
-                Array.Copy(fstBytes, 0, data, 7, fstBytes.Length);
-                File.WriteAllBytes(opts.OutputFile, data);
-                size = data.Length;
+                using (var fst = new PersistentFST<int>(outputType, outputFile))
+                {
+                    for (int i = 0; i < terms.Length; ++i)
+                    {
+                        if (!fst.TryMatch(terms[i], out var value) || value != outputs[i])
+                        {
+                            throw new Exception($"Bug at term {terms[i]}: {value} != {outputs[i]}");
+                        }
+                    }
+                }
             }
-            else if (opts.Format == "Compressed")
-            {
-                var fstBytes = fst.GetBytesCompressed();
-                var data = new byte[6 + 1 + fstBytes.Length];
-                data[0] = (byte)'F';
-                data[1] = (byte)'S';
-                data[2] = (byte)'T';
-                data[3] = (byte)'-';
-                data[4] = (byte)'0';
-                data[5] = (byte)'1';
-                data[6] = (byte)'C';
-                Array.Copy(fstBytes, 0, data, 7, fstBytes.Length);
-                File.WriteAllBytes(opts.OutputFile, data);
-                size = data.Length;
-            }
-            else if (opts.Format == "Dot")
-            {
-                throw new NotImplementedException();
-            }
-            PrintConsole(ConsoleColor.White, $"FST written to the output file: {opts.OutputFile}, size: {size}, time: {timer.Elapsed}");
+            PrintConsole(ConsoleColor.White, $"FST (file)   verification time: {timer.Elapsed}");
 
             return 0;
         }
