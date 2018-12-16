@@ -62,7 +62,7 @@ namespace Protsyk.PMS.FST
         #endregion
 
         public FSTBuilder(IFSTOutput<T> outputType)
-            :this(outputType, 65000, new MemoryStorage())
+            : this(outputType, 65000, new MemoryStorage())
         { }
 
         public FSTBuilder(IFSTOutput<T> outputType, int cacheSize, IPersistentStorage storage)
@@ -211,11 +211,11 @@ namespace Protsyk.PMS.FST
                     var toStateOffset = ts[j].ToOffset;
                     if (startOffset - toStateOffset < toStateOffset)
                     {
-                        size += VarInt.GetByteSize((ulong)(((startOffset - toStateOffset) <<1)|0));
+                        size += VarInt.GetByteSize((ulong)(((startOffset - toStateOffset) << 1) | 0));
                     }
                     else
                     {
-                        size += VarInt.GetByteSize((ulong)(((toStateOffset) <<1)|1));
+                        size += VarInt.GetByteSize((ulong)(((toStateOffset) << 1) | 1));
                     }
                     prev = next;
                 }
@@ -240,9 +240,9 @@ namespace Protsyk.PMS.FST
 
             if (outputType.MaxByteSize() > 64)
             {
-               // TODO: This is not required, but makes it easier to read state.
-               //       can reduce size of FST by ~10%
-               writeIndex += VarInt.WriteVInt32(size, writeBuffer, writeIndex);
+                // TODO: This is not required, but makes it easier to read state.
+                //       can reduce size of FST by ~10%
+                writeIndex += VarInt.WriteVInt32(size, writeBuffer, writeIndex);
             }
 
             if (ts.Count > 0)
@@ -259,11 +259,11 @@ namespace Protsyk.PMS.FST
                     writeIndex += outputType.WriteTo(ts[j].Output, writeBuffer, writeIndex);
                     if (startOffset - toStateOffset < toStateOffset)
                     {
-                        writeIndex += VarInt.WriteVInt64(((startOffset - toStateOffset) <<1)|0, writeBuffer, writeIndex);
+                        writeIndex += VarInt.WriteVInt64(((startOffset - toStateOffset) << 1) | 0, writeBuffer, writeIndex);
                     }
                     else
                     {
-                        writeIndex += VarInt.WriteVInt64(((toStateOffset) <<1)|1, writeBuffer, writeIndex);
+                        writeIndex += VarInt.WriteVInt64(((toStateOffset) << 1) | 1, writeBuffer, writeIndex);
                     }
                     prev = next;
                 }
@@ -318,7 +318,7 @@ namespace Protsyk.PMS.FST
                 // Clean cache
                 if (usageQueue.Count >= minimizedStateCacheSize)
                 {
-                    while (usageQueue.Count >= 1+(0.75*minimizedStateCacheSize)) // Clear 20% of cache
+                    while (usageQueue.Count >= 1 + (0.75 * minimizedStateCacheSize)) // Clear 20% of cache
                     {
                         var last = usageQueue.Last;
                         var frozenState = frozenStates[last.Value];
@@ -481,10 +481,10 @@ namespace Protsyk.PMS.FST
 
         public void Add(string currentWord, T currentOutput)
         {
-            if (currentWord.Length + 1> tempState.Length)
+            if (currentWord.Length + 1 > tempState.Length)
             {
                 var newTemp = new StateWithTransitions[currentWord.Length + 1];
-                for (int i=0; i<maxWordSize; ++i)
+                for (int i = 0; i < maxWordSize; ++i)
                 {
                     newTemp[i] = tempState[i];
                 }
@@ -592,7 +592,7 @@ namespace Protsyk.PMS.FST
 
             int offset = 7;
 
-            Array.Copy(BitConverter.GetBytes(initialOffset),0, data, offset, sizeof(long));
+            Array.Copy(BitConverter.GetBytes(initialOffset), 0, data, offset, sizeof(long));
             offset += sizeof(long);
 
             Array.Copy(BitConverter.GetBytes(stat.States), 0, data, offset, sizeof(long));
@@ -769,6 +769,10 @@ namespace Protsyk.PMS.FST
             if (outputType.MaxByteSize() > 64)
             {
                 readIndex += VarInt.ReadVInt32(stateData, 0, out int size);
+                if (size == 0)
+                {
+                    throw new Exception("Incorrect size. Maybe in-memory format");
+                }
                 Ensure(offset, readIndex + size);
                 hasSize = true;
             }
@@ -790,7 +794,7 @@ namespace Protsyk.PMS.FST
                 if (!hasSize)
                 {
                     //NOTE: Guess how many bytes to read ahead for a better performance. Nothing more
-                    Ensure(offset, readIndex + 2 * tsCount*MaxSizeV32);
+                    Ensure(offset, readIndex + 2 * tsCount * MaxSizeV32);
                 }
 
                 for (int i = 0; i < tsCount; ++i)
@@ -821,11 +825,11 @@ namespace Protsyk.PMS.FST
                     }
 
                     var arc = new ArcOffset<T>
-                        {
-                            Input = (char)(prev),
-                            ToOffset = toOffset,
-                            Output = output
-                        };
+                    {
+                        Input = (char)(prev),
+                        ToOffset = toOffset,
+                        Output = output
+                    };
                     arcs[i] = arc;
                 }
             }
@@ -934,7 +938,7 @@ namespace Protsyk.PMS.FST
                     {
                         // Enumerate transitions in the reverse order because actions in
                         // stack will reverse them again.
-                        for (int i = ts.Length-1; i >= 0; --i)
+                        for (int i = ts.Length - 1; i >= 0; --i)
                         {
                             var t = ts[i];
                             if (matcher.Next(t.Input))
@@ -1024,7 +1028,7 @@ namespace Protsyk.PMS.FST
                     foreach (var t in ts)
                     {
                         size += Numeric.GetByteSize(t.Input) +
-                                Numeric.GetByteSize(t.To) + 
+                                Numeric.GetByteSize(t.To) +
                                 outputType.GetByteSize(t.Output);
                     }
                 }
@@ -1107,6 +1111,10 @@ namespace Protsyk.PMS.FST
             {
                 var startOffset = size;
                 names.Add(states[i].Id, startOffset);
+                if (outputType.MaxByteSize() > 64)
+                {
+                    size += VarInt.GetByteSize(0u);
+                }
                 if (trans.TryGetValue(states[i].Id, out var ts) && (ts.Count > 0))
                 {
                     size += VarInt.GetByteSize(((uint)ts.Count << 1) | (IsFinal(states[i].Id) ? 1u : 0u));
@@ -1141,13 +1149,17 @@ namespace Protsyk.PMS.FST
             result[3] = (byte)'-';
             result[4] = (byte)'0';
             result[5] = (byte)'1';
-            result[6] = (byte)'S';
+            result[6] = (byte)'M'; // This format is slightly different from S, for large output types node size is always zero
             Array.Copy(BitConverter.GetBytes(names[Initial]), 0, result, 7, sizeof(long));
             var writeIndex = 7 + sizeof(long);
 
             for (int i = 0; i < states.Count; ++i)
             {
                 var startOffset = names[states[i].Id];
+                if (outputType.MaxByteSize() > 64)
+                {
+                    writeIndex += VarInt.WriteVInt32(0, result, writeIndex);
+                }
                 if (trans.TryGetValue(states[i].Id, out var ts) && (ts.Count > 0))
                 {
                     writeIndex += VarInt.WriteVInt32((ts.Count << 1) | (IsFinal(states[i].Id) ? 1 : 0), result, writeIndex);
@@ -1193,7 +1205,7 @@ namespace Protsyk.PMS.FST
                 (data[3] != (byte)'-') ||
                 (data[4] != (byte)'0') ||
                 ((data[5] != (byte)'1') && (data[5] != (byte)'2')) ||
-                (data[6] != (byte)'S'))
+                ((data[6] != (byte)'S') && (data[6] != (byte)'M')))
             {
                 throw new Exception("Wrong header");
             }
@@ -1207,11 +1219,16 @@ namespace Protsyk.PMS.FST
                 readIndex = 64;
             }
 
+            // First cycle - create states
+            var temp = readIndex;
+            var stateList = new List<int>();
+
             while (readIndex != data.Length)
             {
                 var sOffset = readIndex;
                 var s = fst.AddState();
                 names.Add(sOffset, s.Id);
+                stateList.Add(s.Id);
 
                 if (outputType.MaxByteSize() > 64)
                 {
@@ -1223,6 +1240,41 @@ namespace Protsyk.PMS.FST
                 {
                     fst.SetFinal(s.Id, true);
                 }
+
+                int tsCount = (int)(v >> 1);
+                if (tsCount > 0)
+                {
+                    for (int i = 0; i < tsCount; ++i)
+                    {
+                        readIndex += VarInt.ReadVInt32(data, readIndex, out var input);
+                        readIndex += outputType.ReadFrom(data, readIndex, out var output);
+                        readIndex += VarInt.ReadVInt64(data, readIndex, out var toOffset);
+
+                        if ((toOffset & 1) == 1)
+                        {
+                            toOffset >>= 1;
+                        }
+                        else
+                        {
+                            toOffset = sOffset - (toOffset >> 1);
+                        }
+                    }
+                }
+            }
+
+            // First cycle - create transitions
+            readIndex = temp;
+            var stateIndex = 0;
+            while (readIndex != data.Length)
+            {
+                var sOffset = readIndex;
+
+                if (outputType.MaxByteSize() > 64)
+                {
+                    readIndex += VarInt.ReadVInt32(data, readIndex, out var nodeSize);
+                }
+
+                readIndex += VarInt.ReadVInt32(data, readIndex, out var v);
 
                 int tsCount = (int)(v >> 1);
                 if (tsCount > 0)
@@ -1243,10 +1295,12 @@ namespace Protsyk.PMS.FST
                             toOffset = sOffset - (toOffset >> 1);
                         }
 
-                        fst.AddTransition(s.Id, (char)(input + prev), names[toOffset], output);
+                        fst.AddTransition(stateList[stateIndex], (char)(input + prev), names[toOffset], output);
                         prev = (int)(input + prev);
                     }
                 }
+
+                ++stateIndex;
             }
 
             fst.Initial = names[initialOffset];
@@ -1486,7 +1540,7 @@ namespace Protsyk.PMS.FST
 
     public abstract class FSTIntOutputBase : IFSTOutput<int>
     {
-        protected FSTIntOutputBase() {}
+        protected FSTIntOutputBase() { }
 
         public int Min(int a, int b) => Math.Min(a, b);
 
@@ -1561,7 +1615,7 @@ namespace Protsyk.PMS.FST
     {
         public static readonly FSTStringOutput Instance = new FSTStringOutput();
 
-        private FSTStringOutput() {}
+        private FSTStringOutput() { }
 
         public string Min(string a, string b)
         {
@@ -1602,7 +1656,7 @@ namespace Protsyk.PMS.FST
         {
             var bytes = Encoding.UTF8.GetBytes(value);
             var size = VarInt.WriteVInt32(bytes.Length, buffer, startIndex);
-            Array.Copy(bytes, 0, buffer, startIndex+size, bytes.Length);
+            Array.Copy(bytes, 0, buffer, startIndex + size, bytes.Length);
             return size + bytes.Length;
         }
     }
