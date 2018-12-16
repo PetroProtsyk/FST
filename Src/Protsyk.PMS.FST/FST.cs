@@ -57,6 +57,8 @@ namespace Protsyk.PMS.FST
         private string previousWord;
 
         private byte[] writeBuffer;
+
+        private FSTBuilderStat stat;
         #endregion
 
         public FSTBuilder(IFSTOutput<T> outputType)
@@ -277,6 +279,7 @@ namespace Protsyk.PMS.FST
             }
 
             storage.WriteAll(startOffset, writeBuffer, 0, toWrite);
+            stat.States++;
             return startOffset;
         }
 
@@ -465,6 +468,7 @@ namespace Protsyk.PMS.FST
 
         public void Begin()
         {
+            stat = new FSTBuilderStat();
             maxWordSize = InitialWordSize;
             tempState = new StateWithTransitions[maxWordSize];
             for (int i = 0; i < maxWordSize; ++i)
@@ -472,7 +476,7 @@ namespace Protsyk.PMS.FST
                 tempState[i] = new StateWithTransitions();
             }
             previousWord = string.Empty;
-            UpdateHeader(long.MinValue);
+            UpdateHeader(long.MinValue, stat);
         }
 
         public void Add(string currentWord, T currentOutput)
@@ -557,6 +561,9 @@ namespace Protsyk.PMS.FST
             SetOutput(tempState[prefixLengthPlusOne - 1], currentWord[prefixLengthPlusOne - 1], currentOutput);
 
             previousWord = currentWord;
+
+            stat.MaxLength = Math.Max(stat.MaxLength, currentWord.Length);
+            stat.TermCount++;
         }
 
         public void End()
@@ -569,20 +576,34 @@ namespace Protsyk.PMS.FST
             }
 
             var initial = FindMinimized(tempState[0]);
-            UpdateHeader(initial.Offset);
+            UpdateHeader(initial.Offset, stat);
         }
 
-        private void UpdateHeader(long initialOffset)
+        private void UpdateHeader(long initialOffset, FSTBuilderStat stat)
         {
-            var data = new byte[7 + sizeof(long)];
+            var data = new byte[64];
             data[0] = (byte)'F';
             data[1] = (byte)'S';
             data[2] = (byte)'T';
             data[3] = (byte)'-';
             data[4] = (byte)'0';
-            data[5] = (byte)'1';
+            data[5] = (byte)'2';
             data[6] = (byte)'S'; // Compressed Stream
-            Array.Copy(BitConverter.GetBytes(initialOffset),0, data, 7, sizeof(long));
+
+            int offset = 7;
+
+            Array.Copy(BitConverter.GetBytes(initialOffset),0, data, offset, sizeof(long));
+            offset += sizeof(long);
+
+            Array.Copy(BitConverter.GetBytes(stat.States), 0, data, offset, sizeof(long));
+            offset += sizeof(long);
+
+            Array.Copy(BitConverter.GetBytes(stat.TermCount), 0, data, offset, sizeof(long));
+            offset += sizeof(long);
+
+            Array.Copy(BitConverter.GetBytes(stat.MaxLength), 0, data, offset, sizeof(int));
+            offset += sizeof(int);
+
             storage.WriteAll(0, data, 0, data.Length);
         }
 
@@ -611,10 +632,21 @@ namespace Protsyk.PMS.FST
         void SetFinal(int stateId, bool isFinal);
     }
 
+    public class FSTBuilderStat
+    {
+        public long TermCount { get; set; }
+
+        public int MaxLength { get; set; }
+
+        public long States { get; set; }
+    }
+
     public class PersistentFST<T> : IDisposable
     {
         #region Fields
         private const int readAheadSize = 128;
+
+        private const int readCacheSize = 32000;
 
         private static readonly int MaxSizeV32 = VarInt.GetByteSize(uint.MaxValue);
 
@@ -629,12 +661,18 @@ namespace Protsyk.PMS.FST
         private byte[] stateData;
 
         private long readOffset;
-        
+
         private int readSize;
+
+        private readonly Dictionary<long, LinkedListNode<(bool, ArcOffset<T>[], long)>> cache = new Dictionary<long, LinkedListNode<(bool, ArcOffset<T>[], long)>>();
+
+        private readonly LinkedList<(bool, ArcOffset<T>[], long)> cacheOrder = new LinkedList<(bool, ArcOffset<T>[], long)>();
         #endregion
 
         #region Properties
         public IFSTOutput<T> OutputType => outputType;
+
+        public FSTBuilderStat Header { get; set; }
         #endregion
 
         #region Methods
@@ -669,10 +707,23 @@ namespace Protsyk.PMS.FST
                 (data[2] != (byte)'T') ||
                 (data[3] != (byte)'-') ||
                 (data[4] != (byte)'0') ||
-                (data[5] != (byte)'1') ||
+                ((data[5] != (byte)'1') && (data[5] != (byte)'2')) ||
                 (data[6] != (byte)'S'))
             {
                 throw new Exception("Wrong header");
+            }
+
+            if (data[5] == (byte)'2')
+            {
+                data = new byte[64];
+                storage.ReadAll(0, data, 0, data.Length);
+
+                Header = new FSTBuilderStat
+                {
+                    States = BitConverter.ToInt64(data, 15),
+                    TermCount = BitConverter.ToInt64(data, 23),
+                    MaxLength = BitConverter.ToInt32(data, 31),
+                };
             }
 
             return BitConverter.ToInt64(data, 7);
@@ -701,6 +752,16 @@ namespace Protsyk.PMS.FST
 
         private (bool isFinal, ArcOffset<T>[] arcs) ReadState(long offset)
         {
+            if (cache.TryGetValue(offset, out var cached))
+            {
+                if (cacheOrder.First != cached)
+                {
+                    cacheOrder.Remove(cached);
+                    cacheOrder.AddFirst(cached);
+                }
+                return (cached.Value.Item1, cached.Value.Item2);
+            }
+
             Ensure(offset, readAheadSize);
 
             var readIndex = 0;
@@ -768,6 +829,13 @@ namespace Protsyk.PMS.FST
                     arcs[i] = arc;
                 }
             }
+
+            while (cache.Count >= readCacheSize)
+            {
+                cache.Remove(cacheOrder.Last.Value.Item3);
+                cacheOrder.RemoveLast();
+            }
+            cache.Add(offset, cacheOrder.AddFirst((isFinal, arcs, offset)));
 
             return (isFinal, arcs);
         }
@@ -864,7 +932,9 @@ namespace Protsyk.PMS.FST
 
                     if (ts != null)
                     {
-                        for (int i = 0; i < ts.Length; ++i)
+                        // Enumerate transitions in the reverse order because actions in
+                        // stack will reverse them again.
+                        for (int i = ts.Length-1; i >= 0; --i)
                         {
                             var t = ts[i];
                             if (matcher.Next(t.Input))
@@ -1122,7 +1192,7 @@ namespace Protsyk.PMS.FST
                 (data[2] != (byte)'T') ||
                 (data[3] != (byte)'-') ||
                 (data[4] != (byte)'0') ||
-                (data[5] != (byte)'1') ||
+                ((data[5] != (byte)'1') && (data[5] != (byte)'2')) ||
                 (data[6] != (byte)'S'))
             {
                 throw new Exception("Wrong header");
@@ -1131,6 +1201,11 @@ namespace Protsyk.PMS.FST
 
             var initialOffset = BitConverter.ToInt64(data, readIndex);
             readIndex += sizeof(long);
+
+            if (data[5] == (byte)'2')
+            {
+                readIndex = 64;
+            }
 
             while (readIndex != data.Length)
             {

@@ -62,7 +62,12 @@ namespace Protsyk.PMS.FST.ConsoleUtil
             {
                 using (var fst = new PersistentFST<int>(outputType, outputFile))
                 {
-                    foreach (var term in fst.Match(new WildcardMatcher(opts.Pattern, 1024)))
+                    var maxLength = fst.Header == null ? 1024 : fst.Header.MaxLength;
+                    if (fst.Header != null)
+                    {
+                        PrintConsole(ConsoleColor.White, $"FST header terms: {fst.Header.TermCount}, max length: {fst.Header.MaxLength}, states: {fst.Header.States}");
+                    }
+                    foreach (var term in fst.Match(new WildcardMatcher(opts.Pattern, maxLength)))
                     {
                         if (!fst.TryMatch(term, out int value))
                         {
