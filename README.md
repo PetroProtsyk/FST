@@ -6,14 +6,13 @@ C# implementation of Finite State Transducer for use in full-text search tasks
 # Command Line Arguments
 
    ```bat
-    dotnet run --configuration=Release -- build -i ../../Datasets/Simple/airports.txt -f Compressed
+    dotnet run --configuration=Release -- build -i ../../Datasets/Simple/airports.txt
    ```
 
    ```txt
-    Input read term: 46894, time: 00:00:00.0527490
-    FST constructed time: 00:00:00.6492170
-    FST verification time: 00:00:00.0529780
-    FST written to the output file: output.fst, size: 1180354, time: 00:00:00.0250810
+    FST constructed time: 00:00:02.5726407, terms: 46894, cache size: 65000, Memory: 71503872, output size: 949500
+    FST (memory) verification time: 00:00:00.2863610
+    FST (file)   verification time: 00:00:00.2789775
    ```
 
    ```bat
@@ -21,11 +20,12 @@ C# implementation of Finite State Transducer for use in full-text search tasks
    ```
 
    ```txt
-    FST read from: output.fst, time: 00:00:00.0592460
+    FST header terms: 46894, max length: 95, states: 162860
     Lelygebergte Airstrip->323787
     Lelystad Airport->2522
-    FST print terms: 2, time: 00:00:00.0475820
+    FST print terms: 2, time: 00:00:00.0708254
    ```
+
 # References
 
 * [Index 1,600,000,000 Keys with Automata and Rust](https://blog.burntsushi.net/transducers)
