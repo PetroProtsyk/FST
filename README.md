@@ -5,6 +5,8 @@ C# implementation of Finite State Transducer for use in full-text search tasks
 
 # Command Line Arguments
 
+Construct FST from prepared sample file. Each line in the input file has the following form input->output. Lines are sorted by input.
+
    ```bat
     dotnet run --configuration=Release -- build -i ../../Datasets/Simple/airports.txt
    ```
@@ -14,6 +16,8 @@ C# implementation of Finite State Transducer for use in full-text search tasks
     FST (memory) verification time: 00:00:00.2863610
     FST (file)   verification time: 00:00:00.2789775
    ```
+   
+Print entries that match given pattern
 
    ```bat
     dotnet run --configuration=Release -- print -p "Lely*"
