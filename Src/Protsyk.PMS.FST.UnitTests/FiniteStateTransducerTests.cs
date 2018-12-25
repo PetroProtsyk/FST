@@ -40,7 +40,7 @@ namespace Protsyk.PMS.FST.UnitTests
             Verify(fst2, inputs, outputs);
         }
 
-        [Fact]
+        // [Fact]
         // public void AcceptanceTestWithStringOutput()
         // {
         //     var inputs = new string[]{
