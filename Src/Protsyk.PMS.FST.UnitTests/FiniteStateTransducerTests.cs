@@ -6,7 +6,7 @@ namespace Protsyk.PMS.FST.UnitTests
     public class FiniteStateTransducerTests
     {
         [Fact]
-        public void AcceptanceTest()
+        public void AcceptanceTestWithIntegerOutput()
         {
             var inputs = new string[]{
                 "Albert Schweitzer Ziekenhuis. Locatie Amstelwijck Heliport",
@@ -39,6 +39,41 @@ namespace Protsyk.PMS.FST.UnitTests
             var fst2 = FST<int>.FromBytesCompressed(fst.GetBytesCompressed(), FSTVarIntOutput.Instance);
             Verify(fst2, inputs, outputs);
         }
+
+        [Fact]
+        // public void AcceptanceTestWithStringOutput()
+        // {
+        //     var inputs = new string[]{
+        //         "Albert Schweitzer Ziekenhuis. Locatie Amstelwijck Heliport",
+        //         "Amsterdam Airfield",
+        //         "Amsterdam Airport",
+        //         "Amsterdam Airport Schiphol",
+        //         "Amsterdam Heliport",
+        //         "Chafei Amsei Airport",
+        //         "New Amsterdam Airport",
+        //         "Schwarzheide/Schipkau Airport"
+        //     };
+
+        //     var outputs = new string[] {
+        //         "43711",
+        //         "23465",
+        //         "41198",
+        //         "2513",
+        //         "43207",
+        //         "5873",
+        //         "41521",
+        //         "29065"
+        //     };
+
+        //     var fst = new FSTBuilder<string>(FSTStringOutput.Instance).FromList(inputs, outputs);
+        //     Verify(fst, inputs, outputs);
+
+        //     var fst1 = FST<string>.FromBytes(fst.GetBytes(), FSTStringOutput.Instance);
+        //     Verify(fst1, inputs, outputs);
+ 
+        //     var fst2 = FST<string>.FromBytesCompressed(fst.GetBytesCompressed(), FSTStringOutput.Instance);
+        //     Verify(fst2, inputs, outputs);
+        // }
 
         [Fact]
         public void WildcardMatchingTest()

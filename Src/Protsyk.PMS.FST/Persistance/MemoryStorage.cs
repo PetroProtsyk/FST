@@ -6,5 +6,9 @@ namespace Protsyk.PMS.FST.Persistance
     {
         public MemoryStorage()
             : base(new MemoryStream()) { }
+
+        public MemoryStorage(byte[] data)
+            : base(new MemoryStream(data)) { }
+
     }
 }

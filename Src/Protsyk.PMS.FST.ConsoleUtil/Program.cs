@@ -20,9 +20,6 @@ namespace Protsyk.PMS.FST.ConsoleUtil
         [Option('o', "output", Required = false, Default = "output.fst", HelpText = "Output file name")]
         public string OutputFile { get; set; }
 
-        [Option('f', "format", Required = false, Default = "Default", HelpText = "Output format (Default, Compressed, DOT)")]
-        public string Format { get; set; }
-
         [Option('c', "cachesize", Required = false, Default = 65000, HelpText = "Size of cache for minimized nodes")]
         public int CacheSize { get; set; }
     }
@@ -37,6 +34,16 @@ namespace Protsyk.PMS.FST.ConsoleUtil
         public string Pattern {get; set;}
     }
 
+    [Verb("render", HelpText = "Render FST into dot notation")]
+    class RenderOptions
+    {
+        [Option('i', "input", Required = false, Default = "output.fst", HelpText = "Input FST file")]
+        public string InputFile { get; set; }
+
+        [Option('o', "output", Required = false, Default = "output.dot", HelpText = "Output dot file")]
+        public string OutputFile { get; set; }
+    }
+
     class Program
     {
         private static IFSTOutput<int> outputType = FSTVarIntOutput.Instance;
@@ -45,10 +52,11 @@ namespace Protsyk.PMS.FST.ConsoleUtil
         {
             PrintConsole(ConsoleColor.Green, "PMS Finite State Transducer (FST) Library (c) Petro Protsyk 2018");
 
-            return Parser.Default.ParseArguments<BuildOptions, PrintOptions>(args)
+            return Parser.Default.ParseArguments<BuildOptions, PrintOptions, RenderOptions>(args)
               .MapResult(
                 (BuildOptions opts) => DoBuild(opts),
                 (PrintOptions opts) => DoPrint(opts),
+                (RenderOptions opts) => DoRender(opts),
                 errors => 255);
         }
 
@@ -58,9 +66,9 @@ namespace Protsyk.PMS.FST.ConsoleUtil
 
             timer.Restart();
             var terms = 0;
-            using (var outputFile = new FileStorage(opts.InputFile))
+            using (var inputFile = new FileStorage(opts.InputFile))
             {
-                using (var fst = new PersistentFST<int>(outputType, outputFile))
+                using (var fst = new PersistentFST<int>(outputType, inputFile))
                 {
                     var maxLength = fst.Header == null ? 1024 : fst.Header.MaxLength;
                     if (fst.Header != null)
@@ -198,6 +206,31 @@ namespace Protsyk.PMS.FST.ConsoleUtil
             }
             PrintConsole(ConsoleColor.White, $"FST (file)   verification time: {timer.Elapsed}");
 
+            return 0;
+        }
+
+        private static int DoRender(RenderOptions opts)
+        {
+            var timer = Stopwatch.StartNew();
+
+            if (File.Exists(opts.OutputFile))
+            {
+                File.Delete(opts.OutputFile);
+            }
+
+            timer.Restart();
+            using (var inputFile = new FileStorage(opts.InputFile))
+            {
+                using (var outputFile = new FileStorage(opts.OutputFile))
+                {
+                    using (var fst = new PersistentFST<int>(outputType, inputFile))
+                    {
+                        fst.ToDotNotation(outputFile);
+                    }
+                }
+            }
+
+            PrintConsole(ConsoleColor.White, $"FST rendered to dot file {opts.OutputFile}, time: {timer.Elapsed}");
             return 0;
         }
 
