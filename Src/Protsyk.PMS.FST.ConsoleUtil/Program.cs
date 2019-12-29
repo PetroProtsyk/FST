@@ -50,7 +50,7 @@ namespace Protsyk.PMS.FST.ConsoleUtil
 
         static int Main(string[] args)
         {
-            PrintConsole(ConsoleColor.Green, "PMS Finite State Transducer (FST) Library (c) Petro Protsyk 2018");
+            PrintConsole(ConsoleColor.Green, "PMS Finite State Transducer (FST) Library (c) Petro Protsyk 2018-2020");
 
             return Parser.Default.ParseArguments<BuildOptions, PrintOptions, RenderOptions>(args)
               .MapResult(

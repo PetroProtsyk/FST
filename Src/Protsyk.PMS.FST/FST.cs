@@ -119,12 +119,12 @@ namespace Protsyk.PMS.FST
                 var result = 0;
                 for (int i = 0; i < Arcs.Count; ++i)
                 {
-                    result = HashCombine.Combine(result,
-                                                 Arcs[i].ToId.GetHashCode(),
-                                                 Arcs[i].Input.GetHashCode(),
-                                                 Arcs[i].Output.GetHashCode());
+                    result = HashCode.Combine(result,
+                                              Arcs[i].ToId.GetHashCode(),
+                                              Arcs[i].Input.GetHashCode(),
+                                              Arcs[i].Output.GetHashCode());
                 }
-                return HashCombine.Combine(result, Arcs.Count, IsFinal ? 1 : 0);
+                return HashCode.Combine(result, Arcs.Count, IsFinal ? 1 : 0);
             }
 
             public bool IsEquivalent(StateWithTransitions other)
@@ -1587,7 +1587,7 @@ namespace Protsyk.PMS.FST
 
         public override int GetHashCode()
         {
-            return HashCombine.Combine(From.GetHashCode(), To.GetHashCode(), Input.GetHashCode(), Output.GetHashCode());
+            return HashCode.Combine(From.GetHashCode(), To.GetHashCode(), Input.GetHashCode(), Output.GetHashCode());
         }
 
         public bool Equals(Arc<T> other)
@@ -1615,7 +1615,7 @@ namespace Protsyk.PMS.FST
 
         public override int GetHashCode()
         {
-            return HashCombine.Combine(ToOffset.GetHashCode(), Input.GetHashCode(), Output.GetHashCode());
+            return HashCode.Combine(ToOffset.GetHashCode(), Input.GetHashCode(), Output.GetHashCode());
         }
 
         public bool Equals(ArcOffset<T> other)

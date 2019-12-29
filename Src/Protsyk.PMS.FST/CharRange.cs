@@ -36,7 +36,7 @@ namespace Protsyk.PMS.FST
 
         public override int GetHashCode()
         {
-            return HashCombine.Combine(start, end);
+            return HashCode.Combine(start, end);
         }
 
         public override string ToString()
