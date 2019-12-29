@@ -124,7 +124,7 @@ namespace Protsyk.PMS.FST
                                                  Arcs[i].Input.GetHashCode(),
                                                  Arcs[i].Output.GetHashCode());
                 }
-                return HashCombine.Combine(result, IsFinal ? 1 : 0);
+                return HashCombine.Combine(result, Arcs.Count, IsFinal ? 1 : 0);
             }
 
             public bool IsEquivalent(StateWithTransitions other)
